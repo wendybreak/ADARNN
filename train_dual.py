@@ -9,7 +9,7 @@ import numpy as np
 
 from tqdm import tqdm
 from utils import utils
-from base.AdaRNN import AdaRNN
+from base.DualAdaRNN import DualAdaRNN
 
 # import pretty_errors
 import dataset.data_process as data_process
@@ -28,12 +28,12 @@ def pprint(*text):
         print(time, *text, flush=True, file=f)
 
 
-def get_model(name='AdaRNN'):
+def get_model(name='DualAdaRNN'):
     n_hiddens = [args.hidden_size for i in range(args.num_layers)]
-    return AdaRNN(use_bottleneck=True, bottleneck_width=64, n_input=args.d_feat, n_hiddens=n_hiddens,  n_output=args.class_num, dropout=args.dropout, model_type=name, len_seq=args.len_seq, trans_loss=args.loss_type).to(device)
+    return DualAdaRNN(use_bottleneck=True, bottleneck_width=64, n_input=args.d_feat, n_hiddens=n_hiddens,  n_output=args.class_num, dropout=args.dropout, model_type=name, len_seq=args.len_seq, trans_loss=args.loss_type).to(device)
 
 
-def train_AdaRNN(args, model, optimizer, train_loader_list, epoch, dist_old=None, weight_mat=None):
+def train_DualAdaRNN(args, model, optimizer, train_loader_list, epoch, dist_old=None, weight_mat=None):
     model.train()
     criterion = nn.MSELoss()
     criterion_1 = nn.L1Loss()
@@ -329,11 +329,23 @@ def inference_all(output_path, model, model_path, loaders):
 
 
 def transform_type(init_weight):
-    weight = torch.ones(args.num_layers, args.len_seq).to(device)
-    for i in range(args.num_layers):
-        for j in range(args.len_seq):
-            weight[i, j] = init_weight[i][j].item()
+    if init_weight is None:
+        # 如果 init_weight 是 None，返回一个默认值或处理逻辑
+        print("Warning: Received None for init_weight, returning default weights.")
+        return torch.ones(args.num_layers, args.len_seq).to(device)  # 可以根据需要返回默认权重
+
+    num_layers = len(init_weight)  # 获取层数
+    len_seq = len(init_weight[0]) if num_layers > 0 else 0  # 假设每层的序列长度相同
+
+    weight = torch.ones(num_layers, len_seq).to(device)
+    for i in range(num_layers):
+        for j in range(len_seq):
+            if i < len(init_weight) and j < len(init_weight[i]):
+                weight[i, j] = init_weight[i][j].item()
+            else:
+                print(f"Warning: Index ({i}, {j}) out of range in init_weight.")
     return weight
+
 
 
 def main_transfer(args):
@@ -369,8 +381,8 @@ def main_transfer(args):
         if args.model_name in ['Boosting']:
             loss, loss1, weight_mat, dist_mat = train_epoch_transfer_Boosting(
                 model, optimizer, train_loader_list,  epoch, dist_mat, weight_mat)
-        elif args.model_name in ['AdaRNN']:
-            loss, loss1, weight_mat, dist_mat = train_AdaRNN(
+        elif args.model_name in ['DualAdaRNN']:
+            loss, loss1, weight_mat, dist_mat = train_DualAdaRNN(
                 args, model, optimizer, train_loader_list, epoch, dist_mat, weight_mat)
         else:
             print("error in model_name!")
@@ -418,7 +430,7 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # model
-    parser.add_argument('--model_name', default='AdaRNN')
+    parser.add_argument('--model_name', default='DualAdaRNN')
     parser.add_argument('--d_feat', type=int, default=6)
 
     parser.add_argument('--hidden_size', type=int, default=64)

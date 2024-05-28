@@ -9,6 +9,8 @@ import torch
 import math
 from dataset import data_process
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def load_act_data(data_folder, batch_size=64, domain="1_20"):
     x_train, y_train, x_test, y_test = data_act.load_data(data_folder, domain)
     x_train, x_test = x_train.reshape(
@@ -64,7 +66,7 @@ def TDC(num_domain, data_file, station, dis_type = 'coral'):
     feat=torch.tensor(feat, dtype=torch.float32)
     feat_shape_1 = feat.shape[1] 
     feat =feat.reshape(-1, feat.shape[2])
-    feat = feat.cuda()
+    feat = feat.to(device)
     # num_day_new = feat.shape[0]
 
     selected = [0, 10]

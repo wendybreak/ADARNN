@@ -16,6 +16,8 @@ import dataset.data_process as data_process
 import matplotlib.pyplot as plt
 from tst import Transformer
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def pprint(*text):
     # print with UTC+8 time
     time = '['+str(datetime.datetime.utcnow() +

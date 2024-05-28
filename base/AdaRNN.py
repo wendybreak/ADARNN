@@ -3,6 +3,7 @@ import torch.nn as nn
 from base.loss_transfer import TransferLoss
 import torch.nn.functional as F
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class AdaRNN(nn.Module):
     """
@@ -82,7 +83,7 @@ class AdaRNN(nn.Module):
 
         out_list_all, out_weight_list = out[1], out[2]
         out_list_s, out_list_t = self.get_features(out_list_all)
-        loss_transfer = torch.zeros((1,)).cuda()
+        loss_transfer = torch.zeros((1,)).to(device)
         for i in range(len(out_list_s)):
             criterion_transder = TransferLoss(
                 loss_type=self.trans_loss, input_dim=out_list_s[i].shape[2])
@@ -142,13 +143,13 @@ class AdaRNN(nn.Module):
 
         out_list_all = out[1]
         out_list_s, out_list_t = self.get_features(out_list_all)
-        loss_transfer = torch.zeros((1,)).cuda()
+        loss_transfer = torch.zeros((1,)).to(device)
         if weight_mat is None:
             weight = (1.0 / self.len_seq *
-                      torch.ones(self.num_layers, self.len_seq)).cuda()
+                      torch.ones(self.num_layers, self.len_seq)).to(device)
         else:
             weight = weight_mat
-        dist_mat = torch.zeros(self.num_layers, self.len_seq).cuda()
+        dist_mat = torch.zeros(self.num_layers, self.len_seq).to(device)
         for i in range(len(out_list_s)):
             criterion_transder = TransferLoss(
                 loss_type=self.trans_loss, input_dim=out_list_s[i].shape[2])

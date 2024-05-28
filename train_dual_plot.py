@@ -9,13 +9,37 @@ import numpy as np
 
 from tqdm import tqdm
 from utils import utils
-from base.AdaRNN import AdaRNN
+from base.DualAdaRNN import DualAdaRNN
 
 # import pretty_errors
 import dataset.data_process as data_process
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def plot_losses(train_losses, val_losses, title='Model Loss', filename='loss_plot_dual.png'):
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.title(title)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)  # Save the figure
+    plt.close()  # Close the figure to free up memory
+
+def plot_predictions(y_true, y_pred, title='Model Predictions', filename='predictions_plot_dual.png'):
+    plt.figure(figsize=(10, 5))
+    plt.plot(y_true, label='True Values')
+    plt.plot(y_pred, label='Predictions')
+    plt.title(title)
+    plt.xlabel('Samples')
+    plt.ylabel('Values')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)
+    plt.close()
 
 def pprint(*text):
     # print with UTC+8 time
@@ -28,12 +52,12 @@ def pprint(*text):
         print(time, *text, flush=True, file=f)
 
 
-def get_model(name='AdaRNN'):
+def get_model(name='DualAdaRNN'):
     n_hiddens = [args.hidden_size for i in range(args.num_layers)]
-    return AdaRNN(use_bottleneck=True, bottleneck_width=64, n_input=args.d_feat, n_hiddens=n_hiddens,  n_output=args.class_num, dropout=args.dropout, model_type=name, len_seq=args.len_seq, trans_loss=args.loss_type).to(device)
+    return DualAdaRNN(use_bottleneck=True, bottleneck_width=64, n_input=args.d_feat, n_hiddens=n_hiddens,  n_output=args.class_num, dropout=args.dropout, model_type=name, len_seq=args.len_seq, trans_loss=args.loss_type).to(device)
 
 
-def train_AdaRNN(args, model, optimizer, train_loader_list, epoch, dist_old=None, weight_mat=None):
+def train_DualAdaRNN(args, model, optimizer, train_loader_list, epoch, dist_old=None, weight_mat=None):
     model.train()
     criterion = nn.MSELoss()
     criterion_1 = nn.L1Loss()
@@ -323,22 +347,41 @@ def inference_all(output_path, model, model_path, loaders):
         loss_list.append(loss)
         loss_l1_list.append(loss_1)
         loss_r_list.append(loss_r)
-        i = i + 1
+
+        plot_predictions(label_list, predict_list, title=f'{list_name[i]} Predictions')
+
+        i += 1
     return loss_list, loss_l1_list, loss_r_list
 
 
 
+
 def transform_type(init_weight):
-    weight = torch.ones(args.num_layers, args.len_seq).to(device)
-    for i in range(args.num_layers):
-        for j in range(args.len_seq):
-            weight[i, j] = init_weight[i][j].item()
+    if init_weight is None:
+        # 如果 init_weight 是 None，返回一个默认值或处理逻辑
+        print("Warning: Received None for init_weight, returning default weights.")
+        return torch.ones(args.num_layers, args.len_seq).to(device)  # 可以根据需要返回默认权重
+
+    num_layers = len(init_weight)  # 获取层数
+    len_seq = len(init_weight[0]) if num_layers > 0 else 0  # 假设每层的序列长度相同
+
+    weight = torch.ones(num_layers, len_seq).to(device)
+    for i in range(num_layers):
+        for j in range(len_seq):
+            if i < len(init_weight) and j < len(init_weight[i]):
+                weight[i, j] = init_weight[i][j].item()
+            else:
+                print(f"Warning: Index ({i}, {j}) out of range in init_weight.")
     return weight
+
 
 
 def main_transfer(args):
     print(args)
-
+    
+    train_losses = []
+    val_losses = []
+    
     output_path = args.outdir + '_' + args.station + '_' + args.model_name + '_weather_' + \
         args.loss_type + '_' + str(args.pre_epoch) + \
         '_' + str(args.dw) + '_' + str(args.lr)
@@ -369,8 +412,8 @@ def main_transfer(args):
         if args.model_name in ['Boosting']:
             loss, loss1, weight_mat, dist_mat = train_epoch_transfer_Boosting(
                 model, optimizer, train_loader_list,  epoch, dist_mat, weight_mat)
-        elif args.model_name in ['AdaRNN']:
-            loss, loss1, weight_mat, dist_mat = train_AdaRNN(
+        elif args.model_name in ['DualAdaRNN']:
+            loss, loss1, weight_mat, dist_mat = train_DualAdaRNN(
                 args, model, optimizer, train_loader_list, epoch, dist_mat, weight_mat)
         else:
             print("error in model_name!")
@@ -383,9 +426,14 @@ def main_transfer(args):
             model, valid_loader, prefix='Valid')
         test_loss, test_loss_l1, test_loss_r = test_epoch(
             model, test_loader, prefix='Test')
-
+        
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        
         pprint('valid %.6f, test %.6f' %
                (val_loss_l1, test_loss_l1))
+
+        plot_losses(train_losses, val_losses, title='Training and Validation Loss')
 
         if val_loss < best_score:
             best_score = val_loss
@@ -418,7 +466,7 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # model
-    parser.add_argument('--model_name', default='AdaRNN')
+    parser.add_argument('--model_name', default='DualAdaRNN')
     parser.add_argument('--d_feat', type=int, default=6)
 
     parser.add_argument('--hidden_size', type=int, default=64)

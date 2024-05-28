@@ -17,6 +17,30 @@ import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def plot_losses(train_losses, val_losses, title='Model Loss', filename='loss_plot_ada.png'):
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.title(title)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)  # Save the figure
+    plt.close()  # Close the figure to free up memory
+
+def plot_predictions(y_true, y_pred, title='Model Predictions', filename='predictions_plot_ada.png'):
+    plt.figure(figsize=(10, 5))
+    plt.plot(y_true, label='True Values')
+    plt.plot(y_pred, label='Predictions')
+    plt.title(title)
+    plt.xlabel('Samples')
+    plt.ylabel('Values')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(filename)
+    plt.close()
+
 def pprint(*text):
     # print with UTC+8 time
     time = '['+str(datetime.datetime.utcnow() +
@@ -323,7 +347,10 @@ def inference_all(output_path, model, model_path, loaders):
         loss_list.append(loss)
         loss_l1_list.append(loss_1)
         loss_r_list.append(loss_r)
-        i = i + 1
+
+        plot_predictions(label_list, predict_list, title=f'{list_name[i]} Predictions')
+
+        i += 1
     return loss_list, loss_l1_list, loss_r_list
 
 
@@ -338,6 +365,9 @@ def transform_type(init_weight):
 
 def main_transfer(args):
     print(args)
+    
+    train_losses = []
+    val_losses = []
 
     output_path = args.outdir + '_' + args.station + '_' + args.model_name + '_weather_' + \
         args.loss_type + '_' + str(args.pre_epoch) + \
@@ -384,8 +414,13 @@ def main_transfer(args):
         test_loss, test_loss_l1, test_loss_r = test_epoch(
             model, test_loader, prefix='Test')
 
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+
         pprint('valid %.6f, test %.6f' %
                (val_loss_l1, test_loss_l1))
+
+        plot_losses(train_losses, val_losses, title='Training and Validation Loss')
 
         if val_loss < best_score:
             best_score = val_loss

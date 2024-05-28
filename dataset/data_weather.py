@@ -10,7 +10,7 @@ import torch
 import pickle
 import datetime
 
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class data_loader(Dataset):
     def __init__(self, df_feature, df_label, df_label_reg, t=None):
